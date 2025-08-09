@@ -1,532 +1,600 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Crypto Dashboard — Free, No Backend</title>
-<style>
-  :root {
-    --bg: #0f1115;
-    --panel: #151924;
-    --text: #e6e9ef;
-    --muted: #8b94a7;
-    --accent: #6ae3ff;
-    --positive: #2ecc71;
-    --negative: #ff6b6b;
-    --warn: #ffb020;
-    --border: #262c3a;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    background: linear-gradient(180deg, #0f1115 0%, #0b0d12 100%);
-    color: var(--text);
-  }
-  header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 16px 20px; border-bottom: 1px solid var(--border);
-    position: sticky; top: 0; background: rgba(15,17,21,0.8); backdrop-filter: blur(8px); z-index: 10;
-  }
-  h1 { margin: 0; font-size: 18px; letter-spacing: 0.5px; }
-  .btn {
-    background: var(--panel); color: var(--text); border: 1px solid var(--border);
-    padding: 8px 12px; border-radius: 8px; cursor: pointer; font-weight: 600;
-  }
-  .btn:hover { border-color: var(--accent); color: #fff; }
-  .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-  .grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px;
-  }
-  .card {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px;
-  }
-  .card h3 { margin: 0 0 8px; font-size: 16px; }
-  .row { display: flex; justify-content: space-between; align-items: center; margin: 6px 0; }
-  .small { color: var(--muted); font-size: 12px; }
-  .price { font-size: 18px; font-weight: 700; }
-  .badge { padding: 2px 8px; border-radius: 999px; font-size: 12px; border: 1px solid var(--border); background: #121622; }
-  .badge.ok { color: var(--positive); border-color: rgba(46,204,113,0.3); }
-  .badge.err { color: var(--negative); border-color: rgba(255,107,107,0.3); }
-  .section-title { margin: 16px 0 8px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
-  .total {
-    display: flex; gap: 16px; align-items: baseline; margin-bottom: 12px;
-  }
-  .total .value { font-size: 28px; font-weight: 800; }
-  .muted { color: var(--muted); }
-  .hr { height: 1px; background: var(--border); margin: 18px 0; }
-
-  /* Modal */
-  .modal-backdrop {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 100;
-  }
-  .modal {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 12px; width: min(900px, 92vw);
-    max-height: 86vh; overflow: hidden; display: flex; flex-direction: column;
-  }
-  .modal header { position: static; background: transparent; border-bottom: 1px solid var(--border); }
-  .modal .content { padding: 14px; overflow: auto; }
-  textarea {
-    width: 100%; min-height: 320px; background: #0c0f17; color: var(--text); border: 1px solid var(--border);
-    border-radius: 10px; padding: 10px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 13px;
-  }
-  .modal .actions { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--border); }
-  .note { font-size: 12px; color: var(--muted); }
-  code.inline { background: #0c0f17; border: 1px solid var(--border); padding: 0 6px; border-radius: 6px; }
-</style>
-</head>
-<body>
-  <header>
-    <h1>Crypto Dashboard — Free, No Backend</h1>
-    <div>
-      <button class="btn" id="btn-refresh">Refresh</button>
-      <button class="btn" id="btn-settings">Settings</button>
-    </div>
-  </header>
-
-  <div class="container">
-    <div class="section-title">Portfolio</div>
-    <div class="card">
-      <div class="total">
-        <div class="value" id="portfolio-total">$0</div>
-        <div class="muted" id="portfolio-meta">0 assets • 0 exchanges</div>
-      </div>
-      <div class="grid" id="portfolio-balances"></div>
-    </div>
-
-    <div class="hr"></div>
-
-    <div class="section-title">Prices by exchange</div>
-    <div class="grid" id="prices-grid"></div>
-
-    <div class="hr"></div>
-
-    <div class="note">
-      Tip: Add a custom exchange in Settings using a URL template with {symbol}. Example
-      <code class="inline">https://api.binance.com/api/v3/ticker/price?symbol={symbol}</code> and JSON path <code class="inline">price</code>.
-    </div>
-  </div>
-
-  <!-- Settings modal -->
-  <div class="modal-backdrop" id="modal-backdrop" role="dialog" aria-modal="true" aria-hidden="true">
-    <div class="modal">
-      <header>
-        <h1>Settings</h1>
-        <div class="small">Your config is saved locally in your browser (no server).</div>
-      </header>
-      <div class="content">
-        <p class="small">
-          - Never paste API keys here. This is front-end only.<br/>
-          - Balances are manual and used for valuation only.<br/>
-          - Some exchanges block browsers (CORS). If a card shows error, use CoinGecko or another source.
-        </p>
-        <label class="small">Configuration (JSON)</label>
-        <textarea id="config-editor"></textarea>
-      </div>
-      <div class="actions">
-        <button class="btn" id="btn-reset">Reset to defaults</button>
-        <div style="flex:1"></div>
-        <button class="btn" id="btn-cancel">Cancel</button>
-        <button class="btn" id="btn-save">Save</button>
-      </div>
-    </div>
-  </div>
-
-<script>
-/* =========================
-   Config, storage, defaults
-   ========================= */
-
-const STORAGE_KEY = "crypto_dashboard_config_v2";
-
-const DEFAULT_CONFIG = {
-  fiat: "USD",
-  refreshMs: 12000,
-  // Coins to track. For each coin, map per-exchange symbols.
-  coins: [
-    {
-      name: "Bitcoin",
-      symbol: "BTC",
-      gecko: "bitcoin",
-      pairs: {
-        binance: "BTCUSDT",
-        coinbase: "BTC-USD"
-      }
-    },
-    {
-      name: "Ethereum",
-      symbol: "ETH",
-      gecko: "ethereum",
-      pairs: {
-        binance: "ETHUSDT",
-        coinbase: "ETH-USD"
-      }
-    }
-  ],
-  // Exchanges: built-ins and custom. You can add new entries.
-  exchanges: {
-    coingecko: {
-      enabled: true,
-      type: "builtin",
-      displayName: "CoinGecko",
-      notes: "Aggregator spot price. No key."
-    },
-    binance: {
-      enabled: true,
-      type: "builtin",
-      displayName: "Binance",
-      notes: "Public ticker. No key."
-    },
-    coinbase: {
-      enabled: true,
-      type: "builtin",
-      displayName: "Coinbase",
-      notes: "Public spot price."
-    },
-    // Example custom (disabled by default)
-    // "ok-custom": {
-    //   enabled: false,
-    //   type: "custom",
-    //   displayName: "My Custom",
-    //   urlTemplate: "https://api.example.com/ticker?symbol={symbol}",
-    //   jsonPath: "price",
-    //   pairs: { BTC: "BTCUSD", ETH: "ETHUSD" }
-    // }
-  },
-  // Manual balances for valuation. Values in coin units.
-  balances: {
-    // Per asset (global)
-    assets: {
-      BTC: 0.0,
-      ETH: 0.0
-    },
-    // Optional per-exchange split (informational)
-    perExchange: {
-      binance: { BTC: 0.0, ETH: 0.0 },
-      coinbase: { BTC: 0.0, ETH: 0.0 }
-    }
-  }
-};
-
-function loadConfig() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return structuredClone(DEFAULT_CONFIG);
-    const parsed = JSON.parse(raw);
-    // Shallow merge defaults to preserve new fields across versions
-    return mergeDeep(structuredClone(DEFAULT_CONFIG), parsed);
-  } catch (e) {
-    console.warn("Config parse error, using defaults", e);
-    return structuredClone(DEFAULT_CONFIG);
-  }
-}
-
-function saveConfig(cfg) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg, null, 2));
-}
-
-function mergeDeep(target, source) {
-  for (const k of Object.keys(source)) {
-    if (source[k] && typeof source[k] === "object" && !Array.isArray(source[k])) {
-      if (!target[k]) target[k] = {};
-      mergeDeep(target[k], source[k]);
-    } else {
-      target[k] = source[k];
-    }
-  }
-  return target;
-}
-
-/* =========================
-   Fetch helpers
-   ========================= */
-
-const timeout = (ms) => new Promise((_, rej) => setTimeout(() => rej(new Error("Timeout")), ms));
-
-async function getJSON(url, ms = 8000) {
-  const res = await Promise.race([fetch(url), timeout(ms)]);
-  if (!res.ok) throw new Error(res.status + " " + res.statusText);
-  return res.json();
-}
-
-function byPath(obj, path) {
-  if (!path) return undefined;
-  return path.split(".").reduce((acc, k) => (acc ? acc[k] : undefined), obj);
-}
-
-/* =========================
-   Price adapters (built-in)
-   ========================= */
-
-async function priceFromCoinGecko(geckoId, fiat = "USD") {
-  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(geckoId)}&vs_currencies=${encodeURIComponent(fiat.toLowerCase())}`;
-  const json = await getJSON(url);
-  const v = json?.[geckoId]?.[fiat.toLowerCase()];
-  if (v == null) throw new Error("No price");
-  return Number(v);
-}
-
-async function priceFromBinance(symbol) {
-  const url = `https://api.binance.com/api/v3/ticker/price?symbol=${encodeURIComponent(symbol)}`;
-  const json = await getJSON(url);
-  const v = json?.price;
-  if (v == null) throw new Error("No price");
-  return Number(v);
-}
-
-async function priceFromCoinbase(productOrPair) {
-  // Accept "BTC-USD" (coinbase v2) or full product code.
-  const url = `https://api.coinbase.com/v2/prices/${encodeURIComponent(productOrPair)}/spot`;
-  const json = await getJSON(url);
-  const v = json?.data?.amount;
-  if (v == null) throw new Error("No price");
-  return Number(v);
-}
-
-async function priceFromCustom(exchangeCfg, symbolForThisExchange) {
-  const url = exchangeCfg.urlTemplate.replace("{symbol}", encodeURIComponent(symbolForThisExchange));
-  const json = await getJSON(url);
-  const v = byPath(json, exchangeCfg.jsonPath);
-  if (v == null) throw new Error("No price at path: " + exchangeCfg.jsonPath);
-  return Number(v);
-}
-
-/* =========================
-   Rendering
-   ========================= */
-
-let CONFIG = loadConfig();
-let REFRESH_HANDLE = null;
-
-const els = {
-  pricesGrid: document.getElementById("prices-grid"),
-  portfolioTotal: document.getElementById("portfolio-total"),
-  portfolioMeta: document.getElementById("portfolio-meta"),
-  portfolioBalances: document.getElementById("portfolio-balances"),
-  btnRefresh: document.getElementById("btn-refresh"),
-  btnSettings: document.getElementById("btn-settings"),
-  modalBackdrop: document.getElementById("modal-backdrop"),
-  configEditor: document.getElementById("config-editor"),
-  btnCancel: document.getElementById("btn-cancel"),
-  btnSave: document.getElementById("btn-save"),
-  btnReset: document.getElementById("btn-reset")
-};
-
-function fmtCurrency(n, fiat = "USD") {
-  try {
-    return new Intl.NumberFormat(undefined, { style: "currency", currency: fiat }).format(n);
-  } catch {
-    return "$" + (Number(n).toFixed(2));
-  }
-}
-function fmtNum(n, d=6) {
-  const x = Number(n);
-  if (x >= 1000) return x.toLocaleString();
-  if (x >= 1) return x.toFixed(2);
-  if (x >= 0.01) return x.toFixed(4);
-  return x.toFixed(d);
-}
-
-function renderPricesSkeleton() {
-  els.pricesGrid.innerHTML = "";
-  const enabledExchanges = Object.entries(CONFIG.exchanges).filter(([_, ex]) => ex.enabled);
-  for (const coin of CONFIG.coins) {
-    const card = document.createElement("div");
-    card.className = "card";
-    const lines = [];
-    lines.push(`<h3>${coin.name} <span class="small">(${coin.symbol})</span></h3>`);
-    for (const [exKey, exCfg] of enabledExchanges) {
-      const label = exCfg.displayName || exKey;
-      lines.push(`
-        <div class="row">
-          <div class="small">${label}</div>
-          <div class="price" id="p_${coin.symbol}_${exKey}">…</div>
-        </div>
-      `);
-    }
-    lines.push(`<div class="row"><span class="small">Last update</span><span class="small" id="t_${coin.symbol}">—</span></div>`);
-    card.innerHTML = lines.join("");
-    els.pricesGrid.appendChild(card);
-  }
-}
-
-async function updatePricesOnce() {
-  const enabledExchanges = Object.entries(CONFIG.exchanges).filter(([_, ex]) => ex.enabled);
-  const now = new Date().toLocaleTimeString();
-  for (const coin of CONFIG.coins) {
-    for (const [exKey, exCfg] of enabledExchanges) {
-      const el = document.getElementById(`p_${coin.symbol}_${exKey}`);
-      if (!el) continue;
-      el.innerHTML = `<span class="badge">Fetching</span>`;
-      try {
-        let price = null;
-        if (exCfg.type === "builtin") {
-          if (exKey === "coingecko") {
-            price = await priceFromCoinGecko(coin.gecko, CONFIG.fiat);
-          } else if (exKey === "binance") {
-            const sym = coin.pairs?.binance;
-            if (!sym) throw new Error("Missing pair");
-            price = await priceFromBinance(sym);
-          } else if (exKey === "coinbase") {
-            const sym = coin.pairs?.coinbase;
-            if (!sym) throw new Error("Missing pair");
-            price = await priceFromCoinbase(sym);
-          } else {
-            throw new Error("Unsupported builtin");
-          }
-        } else if (exCfg.type === "custom") {
-          // symbol mapping order: exchange-specific pairs, then per-coin pairs, then symbol itself
-          const sym = (exCfg.pairs && exCfg.pairs[coin.symbol]) ||
-                      (coin.pairs && coin.pairs[exKey]) ||
-                      coin.symbol;
-          if (!exCfg.urlTemplate || !exCfg.jsonPath) throw new Error("Custom exchange requires urlTemplate and jsonPath");
-          price = await priceFromCustom(exCfg, sym);
-        } else {
-          throw new Error("Unknown exchange type");
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Funding Strategy Dashboard</title>
+    <style>
+        :root {
+            --bg: #0f1115;
+            --panel: #151823;
+            --text: #e6e9ef;
+            --muted: #a4a9b6;
+            --pos: #38d38d;
+            --neg: #ff6b6b;
+            --warn: #ffd166;
+            --line: #232737;
+            --accent: #6ca0ff;
         }
-        el.textContent = fmtNum(price);
-        el.classList.remove("err");
-        document.getElementById(`t_${coin.symbol}`).textContent = now;
-      } catch (e) {
-        el.innerHTML = `<span class="badge err">Error</span>`;
-        console.warn(`Price error for ${coin.symbol} @ ${exKey}`, e);
-      }
-    }
-  }
-}
 
-async function updatePortfolioValuation() {
-  // Use CoinGecko as valuation source for each coin.
-  let total = 0;
-  let items = [];
-  for (const coin of CONFIG.coins) {
-    const bal = Number(CONFIG.balances?.assets?.[coin.symbol] || 0);
-    let price = null;
-    let value = 0;
-    try {
-      price = await priceFromCoinGecko(coin.gecko, CONFIG.fiat);
-      value = bal * price;
-      total += value;
-      items.push({ coin, bal, price, value, ok: true });
-    } catch (e) {
-      items.push({ coin, bal, price: 0, value: 0, ok: false });
-    }
-  }
+        * {
+            box-sizing: border-box;
+        }
 
-  els.portfolioTotal.textContent = fmtCurrency(total, CONFIG.fiat);
-  const exCount = Object.values(CONFIG.exchanges).filter(x => x.enabled).length;
-  els.portfolioMeta.textContent = `${items.length} assets • ${exCount} exchanges`;
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        }
 
-  // Render per-asset cards
-  els.portfolioBalances.innerHTML = "";
-  for (const it of items) {
-    const c = document.createElement("div");
-    c.className = "card";
-    c.innerHTML = `
-      <h3>${it.coin.name} <span class="small">(${it.coin.symbol})</span></h3>
-      <div class="row">
-        <div class="small">Balance</div>
-        <div>${fmtNum(it.bal)}</div>
-      </div>
-      <div class="row">
-        <div class="small">Price (CG)</div>
-        <div>${it.ok ? fmtNum(it.price) : `<span class="badge err">Error</span>`}</div>
-      </div>
-      <div class="row">
-        <div class="small">Value</div>
-        <div>${fmtCurrency(it.value, CONFIG.fiat)}</div>
-      </div>
+        header {
+            padding: 16px 18px;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin: 0;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .controls>* {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            color: var(--text);
+            padding: 8px 10px;
+            border-radius: 8px;
+        }
+
+        button {
+            cursor: pointer;
+            transition: all .15s ease;
+        }
+
+        button.primary {
+            background: var(--accent);
+            border-color: transparent;
+            color: #fff;
+        }
+
+        button:disabled {
+            opacity: .6;
+            cursor: not-allowed;
+        }
+
+        main {
+            padding: 16px 18px;
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 12px;
+        }
+
+        .card {
+            grid-column: span 12;
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 14px;
+        }
+
+        @media (min-width: 880px) {
+            .card.half {
+                grid-column: span 6;
+            }
+
+            .card.third {
+                grid-column: span 4;
+            }
+        }
+
+        .kpi {
+            display: flex;
+            gap: 18px;
+            flex-wrap: wrap;
+        }
+
+        .kpi .item {
+            flex: 1 1 180px;
+            background: #10131c;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 12px;
+        }
+
+        .kpi .label {
+            color: var(--muted);
+            font-size: 12px;
+            margin-bottom: 6px;
+        }
+
+        .kpi .value {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .table-wrap {
+            overflow: auto;
+            max-width: 100%;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        th,
+        td {
+            padding: 10px 8px;
+            border-bottom: 1px solid var(--line);
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        th {
+            text-align: right;
+            color: #cfd3df;
+            font-weight: 600;
+            background: #121626;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+
+        th:first-child,
+        td:first-child {
+            text-align: left;
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        .pos {
+            color: var(--pos);
+        }
+
+        .neg {
+            color: var(--neg);
+        }
+
+        .warn {
+            color: var(--warn);
+        }
+
+        .badge {
+            padding: 3px 8px;
+            border-radius: 999px;
+            font-size: 12px;
+            border: 1px solid var(--line);
+            background: #0f1320;
+        }
+
+        footer {
+            padding: 10px 18px 24px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .small {
+            font-size: 12px;
+        }
+
+        .mono {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>📊 Funding Strategy Dashboard — $10k Market‑Neutral Carry</h1>
+        <div class="controls">
+            <select id="interval">
+                <option value="60">Refresh: 60s</option>
+                <option value="120">Refresh: 2m</option>
+                <option value="300" selected>Refresh: 5m</option>
+                <option value="600">Refresh: 10m</option>
+            </select>
+            <button id="refresh" class="primary">Refresh now</button>
+            <button id="toggle">Start auto</button>
+            <span id="last" class="badge">Last update: —</span>
+        </div>
+    </header>
+
+    <main>
+        <section class="card half">
+            <div class="kpi">
+                <div class="item">
+                    <div class="label">Deployed capital</div>
+                    <div class="value" id="cap">$0</div>
+                </div>
+                <div class="item">
+                    <div class="label">Expected daily net</div>
+                    <div class="value" id="netDay">$0.00</div>
+                </div>
+                <div class="item">
+                    <div class="label">Expected monthly net (30d)</div>
+                    <div class="value" id="netMonth">$0.00</div>
+                </div>
+                <div class="item">
+                    <div class="label">Pairs</div>
+                    <div class="value" id="pairs">0</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
+            <div class="table-wrap">
+                <table id="tbl">
+                    <thead>
+                        <tr>
+                            <th>Pair</th>
+                            <th>Spot</th>
+                            <th>Perp</th>
+                            <th>Funding/8h</th>
+                            <th>Windows/day</th>
+                            <th>Basis</th>
+                            <th>$ Alloc</th>
+                            <th>Qty</th>
+                            <th>Funding/day</th>
+                            <th>Fees/day</th>
+                            <th>Borrow/day</th>
+                            <th>Net/day</th>
+                            <th>Net/mo</th>
+                            <th>Flags</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div class="small muted" style="margin-top:8px">
+                Notes: Funding/day = |perp notional| × funding per window × windows/day. Fees/day assume round‑trip
+                every 3 days. Basis = (Perp − Spot)/Spot.
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        Built for Hayder’s funding carry. Edit CONFIG inside this file to change pairs, allocations, or exchanges.
+    </footer>
+
+    <script>
+        /* ===========================
+           CONFIG: edit this section
+           =========================== */
+        const WINDOWS_PER_DAY_DEFAULT = 3; // Typical 8h windows: 3/day
+        const REBALANCE_DAYS = 3;          // Amortize round-trip fees over 3 days
+
+        const CONFIG = [
+            // Bitget: SNT long spot / short perp
+            {
+                coin: "SNT", alloc: 1000, windowsPerDay: 3, feeBps: 10, borrowAPR: 0,
+                side: "longSpotShortPerp",
+                spot: {
+                    ex: "Bitget", symbol: "SNTUSDT",
+                    url: "https://api.bitget.com/api/v2/spot/market/ticker?symbol=SNTUSDT", parser: parseBitgetSpot
+                },
+                perp: {
+                    ex: "Bitget", symbol: "SNTUSDT",
+                    url: "https://api.bitget.com/api/v2/mix/market/ticker?symbol=SNTUSDT&productType=USDT-FUTURES", parser: parseBitgetPerp
+                },
+                funding: {
+                    ex: "Bitget",
+                    url: "https://api.bitget.com/api/v2/mix/market/current-fundRate?symbol=SNTUSDT&productType=USDT-FUTURES", parser: parseBitgetFunding
+                }
+            },
+            // MEXC spot + Gate futures: AIOT long spot / short perp
+            {
+                coin: "AIOT", alloc: 1000, windowsPerDay: 3, feeBps: 12, borrowAPR: 0,
+                side: "longSpotShortPerp",
+                spot: {
+                    ex: "MEXC", symbol: "AIOTUSDT",
+                    url: "https://api.mexc.com/api/v3/ticker/price?symbol=AIOTUSDT", parser: parseMexcSpot
+                },
+                perp: {
+                    ex: "Gate", symbol: "AIOT_USDT",
+                    url: "https://api.gateio.ws/api/v4/futures/usdt/tickers?contract=AIOT_USDT", parser: parseGatePerp
+                },
+                funding: {
+                    ex: "Gate",
+                    url: "https://api.gateio.ws/api/v4/futures/usdt/funding_rate?contract=AIOT_USDT", parser: parseGateFunding
+                }
+            },
+            // Bitget: J short spot / long perp (use only if borrowAPR is acceptable)
+            {
+                coin: "J", alloc: 1000, windowsPerDay: 3, feeBps: 10, borrowAPR: 25, // APR in %
+                side: "shortSpotLongPerp",
+                spot: {
+                    ex: "Bitget", symbol: "JUSDT",
+                    url: "https://api.bitget.com/api/v2/spot/market/ticker?symbol=JUSDT", parser: parseBitgetSpot
+                },
+                perp: {
+                    ex: "Bitget", symbol: "JUSDT",
+                    url: "https://api.bitget.com/api/v2/mix/market/ticker?symbol=JUSDT&productType=USDT-FUTURES", parser: parseBitgetPerp
+                },
+                funding: {
+                    ex: "Bitget",
+                    url: "https://api.bitget.com/api/v2/mix/market/current-fundRate?symbol=JUSDT&productType=USDT-FUTURES", parser: parseBitgetFunding
+                }
+            },
+            // Binance: LINK long spot / short perp (premiumIndex provides funding + mark)
+            {
+                coin: "LINK", alloc: 2000, windowsPerDay: 3, feeBps: 6, borrowAPR: 0,
+                side: "longSpotShortPerp",
+                spot: {
+                    ex: "Binance", symbol: "LINKUSDT",
+                    url: "https://api.binance.com/api/v3/ticker/price?symbol=LINKUSDT", parser: parseBinanceSpot
+                },
+                perp: {
+                    ex: "Binance", symbol: "LINKUSDT",
+                    url: "https://fapi.binance.com/fapi/v1/premiumIndex?symbol=LINKUSDT", parser: parseBinancePerpFromPremium
+                },
+                funding: {
+                    ex: "Binance",
+                    url: "https://fapi.binance.com/fapi/v1/premiumIndex?symbol=LINKUSDT", parser: parseBinanceFundingFromPremium
+                }
+            },
+            // OKX: ARB long spot / short perp
+            {
+                coin: "ARB", alloc: 1500, windowsPerDay: 3, feeBps: 6, borrowAPR: 0,
+                side: "longSpotShortPerp",
+                spot: {
+                    ex: "OKX", symbol: "ARB-USDT",
+                    url: "https://www.okx.com/api/v5/market/ticker?instId=ARB-USDT", parser: parseOkxSpot
+                },
+                perp: {
+                    ex: "OKX", symbol: "ARB-USDT-SWAP",
+                    url: "https://www.okx.com/api/v5/market/ticker?instId=ARB-USDT-SWAP", parser: parseOkxPerp
+                },
+                funding: {
+                    ex: "OKX",
+                    url: "https://www.okx.com/api/v5/public/funding-rate?instId=ARB-USDT-SWAP", parser: parseOkxFunding
+                }
+            },
+            // Binance: OP long spot / short perp
+            {
+                coin: "OP", alloc: 1500, windowsPerDay: 3, feeBps: 6, borrowAPR: 0,
+                side: "longSpotShortPerp",
+                spot: {
+                    ex: "Binance", symbol: "OPUSDT",
+                    url: "https://api.binance.com/api/v3/ticker/price?symbol=OPUSDT", parser: parseBinanceSpot
+                },
+                perp: {
+                    ex: "Binance", symbol: "OPUSDT",
+                    url: "https://fapi.binance.com/fapi/v1/premiumIndex?symbol=OPUSDT", parser: parseBinancePerpFromPremium
+                },
+                funding: {
+                    ex: "Binance",
+                    url: "https://fapi.binance.com/fapi/v1/premiumIndex?symbol=OPUSDT", parser: parseBinanceFundingFromPremium
+                }
+            },
+            // Gate: XEM long spot / short perp
+            {
+                coin: "XEM", alloc: 1000, windowsPerDay: 3, feeBps: 12, borrowAPR: 0,
+                side: "longSpotShortPerp",
+                spot: {
+                    ex: "Gate", symbol: "XEM_USDT",
+                    url: "https://api.gateio.ws/api/v4/spot/tickers?currency_pair=XEM_USDT", parser: parseGateSpot
+                },
+                perp: {
+                    ex: "Gate", symbol: "XEM_USDT",
+                    url: "https://api.gateio.ws/api/v4/futures/usdt/tickers?contract=XEM_USDT", parser: parseGatePerp
+                },
+                funding: {
+                    ex: "Gate",
+                    url: "https://api.gateio.ws/api/v4/futures/usdt/funding_rate?contract=XEM_USDT", parser: parseGateFunding
+                }
+            },
+        ];
+
+        /* ===========================
+           Helpers and parsers
+           =========================== */
+        const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+        async function fetchJSON(url, timeoutMs = 9000) {
+            const ctrl = new AbortController();
+            const id = setTimeout(() => ctrl.abort(), timeoutMs);
+            try {
+                const res = await fetch(url, { signal: ctrl.signal, cache: "no-store" });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return await res.json();
+            } finally { clearTimeout(id); }
+        }
+
+        // Bitget parsers
+        function parseBitgetSpot(j) {
+            // v2 returns {data:{symbol, last,...}} or {data:[{last,...}]}
+            const d = j?.data;
+            if (Array.isArray(d)) return +d[0]?.last || +d[0]?.close || NaN;
+            if (d && typeof d === "object") return +d.last || +d.close || NaN;
+            return NaN;
+        }
+        function parseBitgetPerp(j) {
+            const d = j?.data;
+            if (Array.isArray(d)) return +d[0]?.last || +d[0]?.markPrice || NaN;
+            if (d && typeof d === "object") return +d.last || +d.markPrice || NaN;
+            return NaN;
+        }
+        function parseBitgetFunding(j) {
+            const d = j?.data;
+            if (Array.isArray(d)) return +d[0]?.fundingRate || NaN;
+            if (d && typeof d === "object") return +d.fundingRate || NaN;
+            return NaN;
+        }
+
+        // Binance parsers
+        function parseBinanceSpot(j) { return +j?.price || NaN; }
+        function parseBinancePerpFromPremium(j) { return +j?.markPrice || NaN; }
+        function parseBinanceFundingFromPremium(j) { return +j?.lastFundingRate || NaN; }
+
+        // OKX parsers
+        function parseOkxSpot(j) { return +j?.data?.[0]?.last || +j?.data?.[0]?.lastPx || NaN; }
+        function parseOkxPerp(j) { return +j?.data?.[0]?.last || +j?.data?.[0]?.lastPx || NaN; }
+        function parseOkxFunding(j) { return +j?.data?.[0]?.fundingRate || NaN; }
+
+        // Gate parsers
+        function parseGateSpot(j) { return +j?.[0]?.last || +j?.[0]?.last_price || NaN; }
+        function parseGatePerp(j) { return +j?.[0]?.last || +j?.[0]?.mark_price || NaN; }
+        function parseGateFunding(j) {
+            // Could be { funding_rate: "0.00123", ... } or { r: "0.00123" } or array
+            if (Array.isArray(j)) {
+                return +j?.[0]?.funding_rate || +j?.[0]?.r || NaN;
+            }
+            return +j?.funding_rate || +j?.r || NaN;
+        }
+
+        // MEXC parsers
+        function parseMexcSpot(j) { return +j?.price || NaN; }
+
+        /* ===========================
+           Core calculations
+           =========================== */
+        function fmtUSD(x) { return isFinite(x) ? "$" + x.toFixed(2) : "—"; }
+        function fmtNum(x, d = 4) { return isFinite(x) ? x.toFixed(d) : "—"; }
+        function clsBySign(x) { return x > 0 ? "pos" : (x < 0 ? "neg" : ""); }
+
+        function calcPairMetrics(p) {
+            const spot = p._spot ?? NaN;
+            const perp = p._perp ?? NaN;
+            const fundPerWindow = p._fund ?? NaN; // decimal, e.g., 0.0015 for 15 bps
+            const n = p.windowsPerDay ?? WINDOWS_PER_DAY_DEFAULT;
+            const alloc = p.alloc ?? 0;
+            const feeBps = p.feeBps ?? 10;
+            const borrowAPR = p.borrowAPR ?? 0;
+            if (!isFinite(spot) || !isFinite(perp) || !isFinite(alloc) || spot <= 0) {
+                return { ok: false };
+            }
+            const qty = alloc / spot; // match tokens 1:1
+            const perpNotional = Math.abs(qty * perp);
+            const basis = (perp - spot) / spot; // decimal
+            const fundingDay = isFinite(fundPerWindow) ? perpNotional * fundPerWindow * n : NaN;
+            const feesDay = ((Math.abs(qty * spot) + Math.abs(qty * perp)) * (feeBps / 10000)) / REBALANCE_DAYS;
+            const borrowDay = (p.side === "shortSpotLongPerp" && borrowAPR > 0) ? (Math.abs(qty * spot) * (borrowAPR / 100) / 365) : 0;
+            const netDay = (isFinite(fundingDay) ? fundingDay : 0) - feesDay - borrowDay;
+            const netMonth = netDay * 30;
+            const flags = [];
+            if (isFinite(fundPerWindow) && fundPerWindow <= 0) flags.push("Funding ≤ 0");
+            if (Math.abs(basis) >= 0.008) flags.push("Basis drift ≥ 0.8%");
+            // For delta we assume qty match; if you customize different sizes, add a delta check.
+            return { ok: true, spot, perp, basis, qty, fundingDay, feesDay, borrowDay, netDay, netMonth, fundPerWindow, n, flags };
+        }
+
+        /* ===========================
+           Fetch and render
+           =========================== */
+        async function fetchPair(p) {
+            // Fetch sequentially with small gaps to be gentle
+            try {
+                const s = await fetchJSON(p.spot.url);
+                p._spot = p.spot.parser(s);
+            } catch (e) { console.warn(p.coin, "spot error:", e); }
+
+            await sleep(120);
+
+            try {
+                const pr = await fetchJSON(p.perp.url);
+                p._perp = p.perp.parser(pr);
+            } catch (e) { console.warn(p.coin, "perp error:", e); }
+
+            await sleep(120);
+
+            try {
+                const f = await fetchJSON(p.funding.url);
+                p._fund = p.funding.parser(f);
+            } catch (e) { console.warn(p.coin, "funding error:", e); }
+        }
+
+        async function updateAll() {
+            const tbody = document.querySelector("#tbl tbody");
+            tbody.innerHTML = "";
+            let deployed = 0, sumDay = 0, sumMonth = 0;
+
+            for (const p of CONFIG) {
+                await fetchPair(p);
+                const m = calcPairMetrics(p);
+                deployed += p.alloc || 0;
+
+                const row = document.createElement("tr");
+                if (!m.ok) {
+                    row.innerHTML = `
+        <td>${p.coin}</td>
+        <td colspan="12" class="muted" style="text-align:left">Waiting for live data…</td>
+        <td></td>`;
+                    tbody.appendChild(row);
+                    continue;
+                }
+
+                sumDay += m.netDay;
+                sumMonth += m.netMonth;
+
+                row.innerHTML = `
+      <td><strong>${p.coin}</strong> <span class="badge mono">${p.side === "longSpotShortPerp" ? "L spot / S perp" : "S spot / L perp"}</span></td>
+      <td class="mono">${fmtNum(m.spot, 6)}</td>
+      <td class="mono">${fmtNum(m.perp, 6)}</td>
+      <td class="mono ${clsBySign(m.fundPerWindow)}">${(m.fundPerWindow * 100).toFixed(3)}%</td>
+      <td>${m.n}</td>
+      <td class="${m.basis >= 0 ? 'pos' : 'neg'}">${(m.basis * 100).toFixed(2)}%</td>
+      <td>${fmtUSD(p.alloc)}</td>
+      <td class="mono">${fmtNum(m.qty, 4)}</td>
+      <td class="mono pos">${fmtUSD(m.fundingDay)}</td>
+      <td class="mono">${fmtUSD(m.feesDay)}</td>
+      <td class="mono ${m.borrowDay > 0 ? 'neg' : ''}">${fmtUSD(m.borrowDay)}</td>
+      <td class="mono ${clsBySign(m.netDay)}"><strong>${fmtUSD(m.netDay)}</strong></td>
+      <td class="mono ${clsBySign(m.netMonth)}">${fmtUSD(m.netMonth)}</td>
+      <td class="small ${m.flags.length ? 'warn' : 'muted'}">${m.flags.join(" • ") || "OK"}</td>
     `;
-    els.portfolioBalances.appendChild(c);
-  }
-}
+                tbody.appendChild(row);
+            }
 
-/* =========================
-   Modal / settings
-   ========================= */
+            document.getElementById("cap").textContent = fmtUSD(deployed);
+            document.getElementById("netDay").textContent = fmtUSD(sumDay);
+            document.getElementById("netMonth").textContent = fmtUSD(sumMonth);
+            document.getElementById("pairs").textContent = CONFIG.length.toString();
+            document.getElementById("last").textContent = "Last update: " + new Date().toLocaleTimeString();
+        }
 
-function openSettings() {
-  els.configEditor.value = JSON.stringify(CONFIG, null, 2);
-  els.modalBackdrop.style.display = "flex";
-  els.modalBackdrop.setAttribute("aria-hidden", "false");
-}
+        let timer = null;
+        function setIntervalMs(ms) {
+            if (timer) clearInterval(timer);
+            timer = setInterval(updateAll, ms);
+        }
 
-function closeSettings() {
-  els.modalBackdrop.style.display = "none";
-  els.modalBackdrop.setAttribute("aria-hidden", "true");
-}
+        /* ===========================
+           Wire up UI
+           =========================== */
+        document.getElementById("refresh").addEventListener("click", updateAll);
+        document.getElementById("toggle").addEventListener("click", (e) => {
+            if (timer) {
+                clearInterval(timer); timer = null; e.target.textContent = "Start auto";
+            } else {
+                const ms = +document.getElementById("interval").value * 1000;
+                setIntervalMs(ms); e.target.textContent = "Stop auto";
+            }
+        });
+        document.getElementById("interval").addEventListener("change", (e) => {
+            if (timer) setIntervalMs(+e.target.value * 1000);
+        });
 
-els.btnSettings.addEventListener("click", openSettings);
-els.btnCancel.addEventListener("click", closeSettings);
-els.btnReset.addEventListener("click", () => {
-  if (!confirm("Reset configuration to defaults?")) return;
-  CONFIG = structuredClone(DEFAULT_CONFIG);
-  saveConfig(CONFIG);
-  boot();
-  closeSettings();
-});
-els.btnSave.addEventListener("click", () => {
-  try {
-    const next = JSON.parse(els.configEditor.value);
-    // Minimal validation
-    if (!next || typeof next !== "object") throw new Error("Invalid JSON");
-    if (!next.coins || !Array.isArray(next.coins)) throw new Error("Config.coins must be an array");
-    if (!next.exchanges || typeof next.exchanges !== "object") throw new Error("Config.exchanges must be an object");
-    CONFIG = mergeDeep(structuredClone(DEFAULT_CONFIG), next);
-    saveConfig(CONFIG);
-    boot();
-    closeSettings();
-  } catch (e) {
-    alert("Invalid configuration: " + e.message);
-  }
-});
-
-/* =========================
-   Lifecycle
-   ========================= */
-
-els.btnRefresh.addEventListener("click", () => {
-  updatePricesOnce();
-  updatePortfolioValuation();
-});
-
-function stopAutoRefresh() {
-  if (REFRESH_HANDLE) clearInterval(REFRESH_HANDLE);
-  REFRESH_HANDLE = null;
-}
-
-function startAutoRefresh() {
-  stopAutoRefresh();
-  const ms = Math.max(5000, Number(CONFIG.refreshMs || 12000));
-  REFRESH_HANDLE = setInterval(() => {
-    updatePricesOnce();
-    // Portfolio can update less often, but keep simple
-    updatePortfolioValuation();
-  }, ms);
-}
-
-async function boot() {
-  renderPricesSkeleton();
-  await Promise.allSettled([updatePricesOnce(), updatePortfolioValuation()]);
-  startAutoRefresh();
-}
-
-boot();
-
-/* =========================
-   Quick tips for custom exchanges (in-code doc)
-   =========================
-   - Add a new exchange under config.exchanges:
-     "myex": {
-       "enabled": true,
-       "type": "custom",
-       "displayName": "MyEx",
-       "urlTemplate": "https://api.myex.com/v1/ticker?symbol={symbol}",
-       "jsonPath": "data.last",
-       "pairs": { "BTC": "BTCUSD", "ETH": "ETHUSD" }
-     }
-   - Map symbols per coin (pairs) if the exchange uses different naming.
-   - If a card shows "Error", the browser may be blocked by CORS. Try CoinGecko or Coinbase instead.
-*/
-</script>
-</body>
-</html>
+        // Initial load
+        updateAll();
+    </script>
